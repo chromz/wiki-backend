@@ -13,10 +13,10 @@ func main() {
 	logger := log.GetLogger()
 	defer logger.Sync()
 	port := flag.String("p", "3000", "wiki -p [PORT]")
-	dbPath := flag.String("d", "wiki.db",
+	dbPath := flag.String("d", "./ecommunity.db",
 		"wiki -d [PATH TO DATABASE]")
 	flag.Parse()
-	logger.InitMessage("backend", "using port:"+*port)
+	logger.InitMessage("backend", "port:"+*port)
 	persistence.SetDbPath(*dbPath)
 	logger.FatalError("Could not listen and serve",
 		http.ListenAndServe(":"+*port, routes.RouteHandler()))

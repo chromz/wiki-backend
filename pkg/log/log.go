@@ -56,6 +56,11 @@ func (logger *Logger) InitMessage(resource, message string) {
 	)
 }
 
+// Info is a simple message log
+func (logger *Logger) Info(message string) {
+	logger.zapLogger.Info(message)
+}
+
 // Sync flushes zap logger buffer
 func (logger *Logger) Sync() {
 	instance.zapLogger.Sync()
