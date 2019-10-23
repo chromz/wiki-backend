@@ -88,6 +88,11 @@ func SignUpUser(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 		`
 	tx.Exec(insertQuery, user.ID, user.Username, user.FirstName,
 		user.LastName, hashedPassword)
+	insertUserRole := `
+		INSERT INTO user_role(user_id, role_id)
+		VALUES (?, 2)
+	`
+	tx.Exec(insertUserRole, user.ID)
 	err = tx.Commit()
 	if err != nil {
 		errString := "Unable to add user"
