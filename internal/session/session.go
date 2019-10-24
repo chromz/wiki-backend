@@ -5,9 +5,13 @@ import (
 	"encoding/json"
 	"github.com/chromz/wiki-backend/pkg/argon"
 	"github.com/chromz/wiki-backend/pkg/errormessages"
+	"github.com/chromz/wiki-backend/pkg/log"
 	"github.com/chromz/wiki-backend/pkg/persistence"
+	"github.com/dgrijalva/jwt-go"
 	"github.com/julienschmidt/httprouter"
 	"net/http"
+	"os"
+	"time"
 )
 
 // Credentials is a struct that represents the login info
@@ -15,6 +19,16 @@ type Credentials struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
 }
+
+// Claims is a struct that represents the data inside a JWT
+type Claims struct {
+	UserID string `json:"userId"`
+	Role   string `json:"role"`
+	jwt.StandardClaims
+}
+
+var jwtSecret = []byte(os.Getenv("JWT_SECRET"))
+var logger = log.GetLogger()
 
 // RolesDDL DDL for roles table
 const RolesDDL = `
@@ -93,4 +107,28 @@ func Authenticate(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 			http.StatusConflict)
 		return
 	}
+
+	expirationTime := time.Now().Add(time.Hour)
+	claims := &Claims{
+		UserID: userID,
+		Role:   roleName,
+		StandardClaims: jwt.StandardClaims{
+			ExpiresAt: expirationTime.Unix(),
+		},
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, err := token.SignedString(jwtSecret)
+	if err != nil {
+		errormessages.WriteErrorMessage(w, "Unable to generate jwt",
+			http.StatusInternalServerError)
+		logger.Error("Unable to generate jwt", err)
+		return
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name:     "token",
+		Value:    tokenString,
+		Expires:  expirationTime,
+		HttpOnly: true,
+	})
+	w.WriteHeader(http.StatusNoContent)
 }

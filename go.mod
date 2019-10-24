@@ -3,6 +3,7 @@ module github.com/chromz/wiki-backend
 go 1.13
 
 require (
+	github.com/dgrijalva/jwt-go v3.2.0+incompatible
 	github.com/google/uuid v1.1.1
 	github.com/julienschmidt/httprouter v1.3.0
 	github.com/mattn/go-sqlite3 v1.11.0
