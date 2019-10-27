@@ -72,6 +72,7 @@ func Authenticate(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	if err != nil {
 		errormessages.WriteErrorMessage(w, "Invalid body type",
 			http.StatusBadRequest)
+		return
 	}
 
 	db := persistence.GetDb()
