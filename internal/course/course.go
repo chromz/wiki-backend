@@ -111,6 +111,13 @@ func Create(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 func Read(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	params := r.URL.Query()
 
+	gradeID, err := strconv.ParseInt(p.ByName("id"), 0, 64)
+	if err != nil {
+		errormessages.WriteErrorMessage(w, "Invalid grade id",
+			http.StatusBadRequest)
+		return
+
+	}
 	size, err := strconv.Atoi(params.Get("size"))
 	if err != nil {
 		errormessages.WriteErrorMessage(w, "Invalid size",
@@ -127,20 +134,22 @@ func Read(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		Size:      size,
 		NextToken: nextToken,
 	}
-	db := persistence.GetDb()
-	findQuery := `
-		SELECT id, grade_id, name, description
-		FROM course
-		WHERE id > ?
-		LIMIT ?
-	`
 	if err = page.Validate(); err != nil {
 		errormessages.WriteErrorMessage(w, "Invalid pagination",
 			http.StatusBadRequest)
 		return
 	}
 
-	rows, err := db.Query(findQuery, page.NextToken, page.Size)
+	db := persistence.GetDb()
+	findQuery := `
+		SELECT id, grade_id, name, description
+		FROM course
+		WHERE id > ?
+		AND grade_id = ?
+		LIMIT ?
+	`
+
+	rows, err := db.Query(findQuery, page.NextToken, gradeID, page.Size)
 	if err != nil {
 		errormessages.WriteErrorMessage(w, "Unable to find classes",
 			http.StatusInternalServerError)
