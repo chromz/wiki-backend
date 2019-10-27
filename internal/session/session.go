@@ -195,7 +195,8 @@ func AuthMiddleware(next httprouter.Handle) httprouter.Handle {
 		token, err := jwt.ParseWithClaims(parsedHeader[1], &Claims{},
 			keyFunc)
 		if err != nil {
-			errormessages.WriteErrorMessage(w, "",
+			errormessages.WriteErrorMessage(w,
+				"Incorrect or expired token",
 				http.StatusUnauthorized)
 			return
 		}

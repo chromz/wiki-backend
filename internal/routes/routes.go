@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"github.com/chromz/wiki-backend/internal/grade"
 	"github.com/chromz/wiki-backend/internal/session"
 	"github.com/chromz/wiki-backend/internal/users"
 	"github.com/julienschmidt/httprouter"
@@ -25,6 +26,7 @@ func originMiddleware(next httprouter.Handle) httprouter.Handle {
 	return func(w http.ResponseWriter, r *http.Request,
 		p httprouter.Params) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Content-Type", "application/json")
 		next(w, r, p)
 	}
 }
@@ -37,6 +39,18 @@ func RouteHandler() http.Handler {
 	router.POST("/auth", originMiddleware(session.Authenticate))
 	router.POST("/auth/token",
 		originMiddleware(session.AuthMiddleware(session.Refresh)),
+	)
+	router.POST("/grade",
+		originMiddleware(session.AuthMiddleware(grade.Create)),
+	)
+	router.GET("/grade",
+		originMiddleware(session.AuthMiddleware(grade.Read)),
+	)
+	router.PUT("/grade/:id",
+		originMiddleware(session.AuthMiddleware(grade.Update)),
+	)
+	router.DELETE("/grade/:id",
+		originMiddleware(session.AuthMiddleware(grade.Delete)),
 	)
 	return router
 }

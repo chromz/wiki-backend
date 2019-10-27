@@ -41,14 +41,13 @@ func SignUpUser(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	user := &User{}
 	decoder := json.NewDecoder(r.Body)
 	err := decoder.Decode(user)
-	w.Header().Set("Content-Type", "application/json")
 	if err != nil {
 		errormessages.WriteErrorMessage(w, "Invalid body type",
 			http.StatusBadRequest)
 		return
 	}
 	user.ID = uuid.New().String()
-	if validations, err := user.validate(); err != nil {
+	if validations, err := user.Validate(); err != nil {
 		errormessages.WriteErrorInterface(w, validations,
 			http.StatusBadRequest)
 		return
@@ -106,7 +105,8 @@ func SignUpUser(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	logger.Info("User created " + user.ID)
 }
 
-func (user *User) validate() (map[string][]string, error) {
+// Validate validates user characteristics
+func (user *User) Validate() (map[string][]string, error) {
 	errs := make(map[string][]string)
 	if user.ID == "" {
 		errs["id"] = append(errs["ID"], "id is a required element")
