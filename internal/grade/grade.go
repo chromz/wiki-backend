@@ -144,7 +144,12 @@ func Read(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 		grades = append(grades, grade)
 	}
 	page.Data = grades
-	page.NextToken = grades[len(grades)-1].ID
+	gradesCount := len(grades)
+	if gradesCount > 0 {
+		page.NextToken = grades[gradesCount-1].ID
+	} else {
+		page.NextToken = -1
+	}
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(page)
 }

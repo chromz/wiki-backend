@@ -161,7 +161,12 @@ func Read(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		courses = append(courses, course)
 	}
 	page.Data = courses
-	page.NextToken = courses[len(courses)-1].ID
+	coursesCount := len(courses)
+	if coursesCount > 0 {
+		page.NextToken = courses[coursesCount-1].ID
+	} else {
+		page.NextToken = -1
+	}
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(page)
 }
