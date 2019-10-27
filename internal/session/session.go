@@ -1,16 +1,18 @@
 package session
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"github.com/chromz/wiki-backend/pkg/argon"
 	"github.com/chromz/wiki-backend/pkg/errormessages"
-	"github.com/chromz/wiki-backend/pkg/log"
 	"github.com/chromz/wiki-backend/pkg/persistence"
 	"github.com/dgrijalva/jwt-go"
 	"github.com/julienschmidt/httprouter"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -27,8 +29,19 @@ type Claims struct {
 	jwt.StandardClaims
 }
 
+type tokenResponse struct {
+	Token string `json:"token"`
+}
+
+type key string
+
+// ClaimsKey is the context key to get claims
+const ClaimsKey key = "claims"
+const tokenTimeConstant = 60
+
 var jwtSecret = []byte(os.Getenv("JWT_SECRET"))
-var logger = log.GetLogger()
+
+const cookieName = "token"
 
 // RolesDDL DDL for roles table
 const RolesDDL = `
@@ -108,7 +121,7 @@ func Authenticate(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 		return
 	}
 
-	expirationTime := time.Now().Add(time.Hour)
+	expirationTime := time.Now().Add(tokenTimeConstant * time.Minute)
 	claims := &Claims{
 		UserID: userID,
 		Role:   roleName,
@@ -121,14 +134,80 @@ func Authenticate(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	if err != nil {
 		errormessages.WriteErrorMessage(w, "Unable to generate jwt",
 			http.StatusInternalServerError)
-		logger.Error("Unable to generate jwt", err)
 		return
 	}
-	http.SetCookie(w, &http.Cookie{
-		Name:     "token",
-		Value:    tokenString,
-		Expires:  expirationTime,
-		HttpOnly: true,
-	})
-	w.WriteHeader(http.StatusNoContent)
+	resp := &tokenResponse{
+		Token: tokenString,
+	}
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(resp)
+}
+
+// Refresh is an endpoint dedicated to refresh jwt tokens
+// MUST be used with AuthMiddleware
+func Refresh(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	claims := r.Context().Value(ClaimsKey).(*Claims)
+
+	if time.Unix(claims.ExpiresAt, 0).Sub(time.Now()) > 30*time.Second {
+		errormessages.WriteErrorMessage(w,
+			"Token can only be refreshed when "+
+				"it is withing 30 seconds of expire",
+			http.StatusBadRequest)
+		return
+	}
+	expirationTime := time.Now().Add(tokenTimeConstant * time.Minute)
+	claims.StandardClaims = jwt.StandardClaims{
+		ExpiresAt: expirationTime.Unix(),
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, err := token.SignedString(jwtSecret)
+	if err != nil {
+		errormessages.WriteErrorMessage(w, "Unable to generate jwt",
+			http.StatusInternalServerError)
+		return
+	}
+	resp := &tokenResponse{
+		Token: tokenString,
+	}
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(resp)
+}
+
+func keyFunc(token *jwt.Token) (interface{}, error) {
+	if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+		return nil, errors.New("Invalid singing method")
+	}
+	return []byte(jwtSecret), nil
+}
+
+// AuthMiddleware middleware that checks if the JWT token is valid
+func AuthMiddleware(next httprouter.Handle) httprouter.Handle {
+	return func(w http.ResponseWriter, r *http.Request,
+		p httprouter.Params) {
+		authorization := r.Header.Get("Authorization")
+		parsedHeader := strings.Split(authorization, " ")
+		if parsedHeader[0] != "Bearer" {
+			errormessages.WriteErrorMessage(w, "Invalid token type",
+				http.StatusBadRequest)
+			return
+		}
+
+		token, err := jwt.ParseWithClaims(parsedHeader[1], &Claims{},
+			keyFunc)
+		if err != nil {
+			errormessages.WriteErrorMessage(w, "",
+				http.StatusUnauthorized)
+			return
+		}
+		// Check if token is valid
+		if claims, ok := token.Claims.(*Claims); ok && token.Valid {
+			ctx := context.WithValue(r.Context(), ClaimsKey,
+				claims)
+			next(w, r.WithContext(ctx), p)
+		} else {
+			errormessages.WriteErrorMessage(w, "Invalid token",
+				http.StatusUnauthorized)
+		}
+
+	}
 }

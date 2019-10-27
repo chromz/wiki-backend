@@ -34,6 +34,9 @@ func RouteHandler() http.Handler {
 	router := httprouter.New()
 	router.GlobalOPTIONS = http.HandlerFunc(cors)
 	router.POST("/users", originMiddleware(users.SignUpUser))
-	router.POST("/session", originMiddleware(session.Authenticate))
+	router.POST("/auth", originMiddleware(session.Authenticate))
+	router.POST("/auth/token",
+		originMiddleware(session.AuthMiddleware(session.Refresh)),
+	)
 	return router
 }

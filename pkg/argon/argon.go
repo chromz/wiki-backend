@@ -68,7 +68,7 @@ func CompareHashAndPassword(hashedPassword, password []byte) error {
 	if subtle.ConstantTimeCompare(digest, hashToVerify) == 1 {
 		return nil
 	}
-	return errors.New("Hashes dont match")
+	return errors.New("Hashes don't match")
 }
 
 func decodeHash(hashedPassword []byte) (time, memory uint32,
