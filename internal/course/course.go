@@ -1,4 +1,4 @@
-package grade
+package course
 
 import (
 	"encoding/json"
@@ -12,43 +12,58 @@ import (
 	"strconv"
 )
 
-// GradeDDL is the query to create the grades table
-const GradeDDL = `
-CREATE TABLE IF NOT EXISTS "grade" (
+// CourseDDL is the query to create the clasroom table
+const CourseDDL = `
+CREATE TABLE IF NOT EXISTS "classroom" (
 	"id"	INTEGER PRIMARY KEY AUTOINCREMENT UNIQUE,
+	"grade_id"	INTEGER NOT NULL,
 	"name"	TEXT NOT NULL,
-	"description"	TEXT
+	"description"	TEXT,
+	FOREIGN KEY("grade_id") REFERENCES "grade"("id") ON DELETE CASCADE
 );
 `
 
-// Grade is a struct that represents a school grade
-type Grade struct {
+// Course struct that represents a course in a grade
+type Course struct {
 	ID          int64  `json:"id"`
+	GradeID     int64  `json:"gradeId"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
 }
 
-// Validate validates grade values
-func (g *Grade) Validate() error {
-	if g.Name == "" {
+// Validate validates the integrity of Course
+func (c *Course) Validate() error {
+	if c.Name == "" {
 		return errors.New("Invalid name")
 	}
+	if c.GradeID <= 0 {
+		return errors.New("Invalid grade id")
+	}
 	return nil
+
 }
 
-// Create creates a grade resource
-func Create(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	grade := &Grade{}
+// Create is an endpoint to create a course
+func Create(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+	course := &Course{}
 	decoder := json.NewDecoder(r.Body)
-	err := decoder.Decode(grade)
+	err := decoder.Decode(course)
 	if err != nil {
 		errormessages.WriteErrorMessage(w, "Invalid body type",
 			http.StatusBadRequest)
 		return
 	}
 
-	if err = grade.Validate(); err != nil {
-		errormessages.WriteErrorMessage(w, "Invalid grade",
+	gradeID, err := strconv.ParseInt(p.ByName("id"), 0, 64)
+	if err != nil {
+		errormessages.WriteErrorMessage(w, "Invalid grade id",
+			http.StatusBadRequest)
+		return
+
+	}
+	course.GradeID = gradeID
+	if err = course.Validate(); err != nil {
+		errormessages.WriteErrorMessage(w, "Invalid course data",
 			http.StatusBadRequest)
 		return
 	}
@@ -68,17 +83,18 @@ func Create(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	}
 
 	insertQuery := `
-		INSERT INTO grade(name, description)
-		VALUES(?, ?)
+		INSERT INTO course(grade_id, name, description)
+		VALUES(?, ?, ?)
 	`
-	res, err := tx.Exec(insertQuery, grade.Name, grade.Description)
+	res, err := tx.Exec(insertQuery, course.GradeID, course.Name,
+		course.Description)
 	if err != nil {
 		errormessages.WriteErrorMessage(w, "Unable to add grade",
 			http.StatusInternalServerError)
 		tx.Rollback()
 		return
 	}
-	grade.ID, _ = res.LastInsertId()
+	course.ID, _ = res.LastInsertId()
 	err = tx.Commit()
 	if err != nil {
 		errString := "Unable to add grade"
@@ -88,11 +104,11 @@ func Create(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 		return
 	}
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(grade)
+	json.NewEncoder(w).Encode(course)
 }
 
-// Read returns available grades, paginated
-func Read(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+// Read returns available courses, paginated
+func Read(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	params := r.URL.Query()
 
 	size, err := strconv.Atoi(params.Get("size"))
@@ -113,8 +129,8 @@ func Read(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	}
 	db := persistence.GetDb()
 	findQuery := `
-		SELECT id, name, description
-		FROM grade
+		SELECT id, grade_id, name, description
+		FROM course
 		WHERE id > ?
 		LIMIT ?
 	`
@@ -131,27 +147,28 @@ func Read(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 		return
 	}
 	defer rows.Close()
-	var grades []Grade
+	var courses []Course
 	for rows.Next() {
-		grade := Grade{}
-		err = rows.Scan(&grade.ID, &grade.Name, &grade.Description)
+		course := Course{}
+		err = rows.Scan(&course.ID, &course.GradeID,
+			&course.Name, &course.Description)
 		if err != nil {
 			errormessages.WriteErrorMessage(w,
 				"Unable to find grades",
 				http.StatusInternalServerError)
 			return
 		}
-		grades = append(grades, grade)
+		courses = append(courses, course)
 	}
-	page.Data = grades
-	page.NextToken = grades[len(grades)-1].ID
+	page.Data = courses
+	page.NextToken = courses[len(courses)-1].ID
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(page)
 }
 
-// Update updates a grade resource
+// Update updates a course resource
 func Update(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
-	grade := &Grade{}
+	course := &Course{}
 	decoder := json.NewDecoder(r.Body)
 	gradeID, err := strconv.ParseInt(p.ByName("id"), 0, 64)
 	if err != nil {
@@ -160,21 +177,30 @@ func Update(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		return
 
 	}
-	err = decoder.Decode(grade)
-	grade.ID = gradeID
+	courseID, err := strconv.ParseInt(p.ByName("courseid"), 0, 64)
+	if err != nil {
+		errormessages.WriteErrorMessage(w, "Invalid id",
+			http.StatusBadRequest)
+		return
+
+	}
+
+	err = decoder.Decode(course)
+	course.ID = courseID
+	course.GradeID = gradeID
 	if err != nil {
 		errormessages.WriteErrorMessage(w, "Invalid body type",
 			http.StatusBadRequest)
 		return
 	}
 
-	if err = grade.Validate(); err != nil {
+	if err = course.Validate(); err != nil {
 		errormessages.WriteErrorMessage(w, "Invalid grade",
 			http.StatusBadRequest)
 		return
 	}
 
-	if grade.ID <= 0 {
+	if course.ID <= 0 {
 		errormessages.WriteErrorMessage(w, "ID is required",
 			http.StatusBadRequest)
 		return
@@ -188,11 +214,12 @@ func Update(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	}
 	db := persistence.GetDb()
 	updateQuery := `
-		UPDATE grade
+		UPDATE course
 		SET name = ?, description = ?
 		WHERE id = ?
 	`
-	res, err := db.Exec(updateQuery, grade.Name, grade.Description, grade.ID)
+	res, err := db.Exec(updateQuery, course.Name, course.Description,
+		course.ID)
 	rowsAffected, _ := res.RowsAffected()
 	if rowsAffected != 1 {
 		errormessages.WriteErrorInterface(w, "Id not found",
@@ -201,16 +228,16 @@ func Update(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 
 	}
 	if err != nil {
-		errormessages.WriteErrorInterface(w, "Unable to update grade",
+		errormessages.WriteErrorInterface(w, "Unable to update course",
 			http.StatusInternalServerError)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// Delete endpoint to delete a specifig grade
+// Delete endpoint to delete a specifig course
 func Delete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
-	gradeID, err := strconv.ParseInt(p.ByName("id"), 0, 64)
+	courseID, err := strconv.ParseInt(p.ByName("courseid"), 0, 64)
 
 	if err != nil {
 		errormessages.WriteErrorMessage(w, "Invalid id",
@@ -219,7 +246,7 @@ func Delete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 
 	}
 
-	if gradeID <= 0 {
+	if courseID <= 0 {
 		errormessages.WriteErrorMessage(w, "ID is required",
 			http.StatusBadRequest)
 		return
@@ -233,10 +260,10 @@ func Delete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	}
 	db := persistence.GetDb()
 	deleteQuery := `
-		DELETE FROM grade
+		DELETE FROM course
 		WHERE id = ?
 	`
-	res, err := db.Exec(deleteQuery, gradeID)
+	res, err := db.Exec(deleteQuery, courseID)
 	if err != nil {
 		errormessages.WriteErrorMessage(w, "Unable to delete",
 			http.StatusInternalServerError)
