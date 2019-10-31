@@ -4,6 +4,7 @@ import (
 	"github.com/chromz/wiki-backend/internal/course"
 	"github.com/chromz/wiki-backend/internal/grade"
 	"github.com/chromz/wiki-backend/internal/session"
+	"github.com/chromz/wiki-backend/internal/textclass"
 	"github.com/chromz/wiki-backend/internal/users"
 	"github.com/julienschmidt/httprouter"
 	"net/http"
@@ -64,6 +65,18 @@ func RouteHandler() http.Handler {
 	)
 	router.DELETE("/grade/:id/course/:courseid",
 		originMiddleware(session.AuthMiddleware(course.Delete)),
+	)
+	router.POST("/grade/:id/course/:courseid/textclass",
+		originMiddleware(session.AuthMiddleware(textclass.Create)),
+	)
+	router.GET("/grade/:id/course/:courseid/textclass",
+		originMiddleware(session.AuthMiddleware(textclass.Read)),
+	)
+	router.PUT("/grade/:id/course/:courseid/textclass/:classid",
+		originMiddleware(session.AuthMiddleware(textclass.Update)),
+	)
+	router.DELETE("/grade/:id/course/:courseid/textclass/:classid",
+		originMiddleware(session.AuthMiddleware(textclass.Delete)),
 	)
 	return router
 }

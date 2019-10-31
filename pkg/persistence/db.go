@@ -22,7 +22,7 @@ func SetDbPath(path string) {
 func GetDb() *sql.DB {
 	once.Do(func() {
 		var err error
-		db, err = sql.Open("sqlite3", dbPath)
+		db, err = sql.Open("sqlite3", dbPath+"?_foreign_keys=on")
 		if err != nil {
 			logger.Error("Unable to open sqlite database", err)
 		}

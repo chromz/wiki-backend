@@ -76,11 +76,6 @@ func Authenticate(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	}
 
 	db := persistence.GetDb()
-	if err != nil {
-		errormessages.WriteErrorMessage(w, "Unable to reach database",
-			http.StatusInternalServerError)
-		return
-	}
 	findUserQuery := `
 		SELECT id, password
 		FROM user WHERE username = ?

@@ -8,6 +8,7 @@ import (
 	"github.com/chromz/wiki-backend/pkg/pagination"
 	"github.com/chromz/wiki-backend/pkg/persistence"
 	"github.com/julienschmidt/httprouter"
+	"github.com/mattn/go-sqlite3"
 	"net/http"
 	"strconv"
 )
@@ -89,7 +90,16 @@ func Create(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	res, err := tx.Exec(insertQuery, course.GradeID, course.Name,
 		course.Description)
 	if err != nil {
-		errormessages.WriteErrorMessage(w, "Unable to add grade",
+		if sqliteErr, ok := err.(sqlite3.Error); ok {
+			if sqliteErr.ExtendedCode == sqlite3.ErrConstraintForeignKey {
+				errormessages.WriteErrorMessage(w,
+					"Invalid grade id",
+					http.StatusBadRequest)
+				tx.Rollback()
+				return
+			}
+		}
+		errormessages.WriteErrorMessage(w, "Unable to add course",
 			http.StatusInternalServerError)
 		tx.Rollback()
 		return
@@ -97,7 +107,7 @@ func Create(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	course.ID, _ = res.LastInsertId()
 	err = tx.Commit()
 	if err != nil {
-		errString := "Unable to add grade"
+		errString := "Unable to add course"
 		errormessages.WriteErrorMessage(w, errString,
 			http.StatusInternalServerError)
 		tx.Rollback()
@@ -151,7 +161,7 @@ func Read(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 
 	rows, err := db.Query(findQuery, page.NextToken, gradeID, page.Size)
 	if err != nil {
-		errormessages.WriteErrorMessage(w, "Unable to find classes",
+		errormessages.WriteErrorMessage(w, "Unable to find courses",
 			http.StatusInternalServerError)
 		return
 	}
@@ -163,7 +173,7 @@ func Read(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 			&course.Name, &course.Description)
 		if err != nil {
 			errormessages.WriteErrorMessage(w,
-				"Unable to find grades",
+				"Unable to find courses",
 				http.StatusInternalServerError)
 			return
 		}
@@ -209,7 +219,7 @@ func Update(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	}
 
 	if err = course.Validate(); err != nil {
-		errormessages.WriteErrorMessage(w, "Invalid grade",
+		errormessages.WriteErrorMessage(w, "Invalid course",
 			http.StatusBadRequest)
 		return
 	}
