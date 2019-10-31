@@ -20,7 +20,10 @@ func main() {
 	flag.Parse()
 	logger.InitMessage("backend", "port:"+*port)
 	persistence.SetDbPath(*dbPath)
-	textclass.SyncDir(*directory)
+	if (*directory)[len(*directory)-1] != '/' {
+		*directory += "/"
+	}
+	textclass.NewSyncDir(*directory)
 	logger.FatalError("Could not listen and serve",
 		http.ListenAndServe(":"+*port, routes.RouteHandler()))
 }

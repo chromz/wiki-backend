@@ -81,5 +81,9 @@ func RouteHandler() http.Handler {
 	router.DELETE("/grade/:id/course/:courseid/textclass/:classid",
 		originMiddleware(session.AuthMiddleware(textclass.Delete)),
 	)
+
+	router.ServeFiles("/static/*filepath",
+		http.Dir(textclass.SyncDir()+"images/"))
+
 	return router
 }

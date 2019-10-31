@@ -4,11 +4,13 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/chromz/wiki-backend/internal/session"
+	"github.com/chromz/wiki-backend/internal/textclass"
 	"github.com/chromz/wiki-backend/pkg/errormessages"
 	"github.com/chromz/wiki-backend/pkg/pagination"
 	"github.com/chromz/wiki-backend/pkg/persistence"
 	"github.com/julienschmidt/httprouter"
 	"net/http"
+	"os"
 	"strconv"
 )
 
@@ -38,6 +40,12 @@ func (g *Grade) Validate() error {
 
 // Create creates a grade resource
 func Create(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	claims := r.Context().Value(session.ClaimsKey).(*session.Claims)
+	if claims.Role != "TEACHER" {
+		errormessages.WriteErrorInterface(w, "Not enough privileges",
+			http.StatusUnauthorized)
+		return
+	}
 	grade := &Grade{}
 	decoder := json.NewDecoder(r.Body)
 	err := decoder.Decode(grade)
@@ -53,12 +61,6 @@ func Create(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 		return
 	}
 
-	claims := r.Context().Value(session.ClaimsKey).(*session.Claims)
-	if claims.Role != "TEACHER" {
-		errormessages.WriteErrorInterface(w, "Not enough privileges",
-			http.StatusUnauthorized)
-		return
-	}
 	db := persistence.GetDb()
 	tx, err := db.Begin()
 	if err != nil {
@@ -79,6 +81,21 @@ func Create(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 		return
 	}
 	grade.ID, _ = res.LastInsertId()
+	dirName := textclass.SyncDir() + strconv.FormatInt(grade.ID, 10) + "/"
+	if err = os.Mkdir(dirName, 0700); err != nil {
+		errormessages.WriteErrorMessage(w, "Unable  to create grade",
+			http.StatusInternalServerError)
+		tx.Rollback()
+		return
+	}
+	imgDirName := textclass.SyncDir() + "images/" +
+		strconv.FormatInt(grade.ID, 10) + "/"
+	if err = os.MkdirAll(imgDirName, 0700); err != nil {
+		errormessages.WriteErrorMessage(w, "Unable  to create grade",
+			http.StatusInternalServerError)
+		tx.Rollback()
+		return
+	}
 	err = tx.Commit()
 	if err != nil {
 		errString := "Unable to add grade"
@@ -87,6 +104,7 @@ func Create(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 		tx.Rollback()
 		return
 	}
+
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(grade)
 }
@@ -156,6 +174,13 @@ func Read(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 
 // Update updates a grade resource
 func Update(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+
+	claims := r.Context().Value(session.ClaimsKey).(*session.Claims)
+	if claims.Role != "TEACHER" {
+		errormessages.WriteErrorInterface(w, "Not enough privileges",
+			http.StatusUnauthorized)
+		return
+	}
 	grade := &Grade{}
 	decoder := json.NewDecoder(r.Body)
 	gradeID, err := strconv.ParseInt(p.ByName("id"), 0, 64)
@@ -184,13 +209,6 @@ func Update(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 			http.StatusBadRequest)
 		return
 	}
-
-	claims := r.Context().Value(session.ClaimsKey).(*session.Claims)
-	if claims.Role != "TEACHER" {
-		errormessages.WriteErrorInterface(w, "Not enough privileges",
-			http.StatusUnauthorized)
-		return
-	}
 	db := persistence.GetDb()
 	updateQuery := `
 		UPDATE grade
@@ -215,6 +233,12 @@ func Update(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 
 // Delete endpoint to delete a specifig grade
 func Delete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+	claims := r.Context().Value(session.ClaimsKey).(*session.Claims)
+	if claims.Role != "TEACHER" {
+		errormessages.WriteErrorInterface(w, "Not enough privileges",
+			http.StatusUnauthorized)
+		return
+	}
 	gradeID, err := strconv.ParseInt(p.ByName("id"), 0, 64)
 
 	if err != nil {
@@ -230,21 +254,22 @@ func Delete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		return
 	}
 
-	claims := r.Context().Value(session.ClaimsKey).(*session.Claims)
-	if claims.Role != "TEACHER" {
-		errormessages.WriteErrorInterface(w, "Not enough privileges",
-			http.StatusUnauthorized)
+	db := persistence.GetDb()
+	tx, err := db.Begin()
+	if err != nil {
+		errormessages.WriteErrorMessage(w, "Unable to reach database",
+			http.StatusInternalServerError)
 		return
 	}
-	db := persistence.GetDb()
 	deleteQuery := `
 		DELETE FROM grade
 		WHERE id = ?
 	`
-	res, err := db.Exec(deleteQuery, gradeID)
+	res, err := tx.Exec(deleteQuery, gradeID)
 	if err != nil {
 		errormessages.WriteErrorMessage(w, "Unable to delete",
 			http.StatusInternalServerError)
+		tx.Rollback()
 		return
 	}
 	affectedRows, err := res.RowsAffected()
@@ -252,8 +277,33 @@ func Delete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	if affectedRows == 0 {
 		errormessages.WriteErrorMessage(w, "Invalid id",
 			http.StatusBadRequest)
+		tx.Rollback()
+		return
+	}
+
+	dirName := textclass.SyncDir() + strconv.FormatInt(gradeID, 10) + "/"
+	if err = os.RemoveAll(dirName); err != nil {
+		errormessages.WriteErrorMessage(w, "Unable  to create grade",
+			http.StatusInternalServerError)
+		tx.Rollback()
+		return
+	}
+	imgDirName := textclass.SyncDir() + "images/" +
+		strconv.FormatInt(gradeID, 10) + "/"
+	if err = os.RemoveAll(imgDirName); err != nil {
+		errormessages.WriteErrorMessage(w, "Unable  to create grade",
+			http.StatusInternalServerError)
+		tx.Rollback()
+		return
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		errString := "Unable to add grade"
+		errormessages.WriteErrorMessage(w, errString,
+			http.StatusInternalServerError)
+		tx.Rollback()
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
-	// remember to delete the files!!!!
 }

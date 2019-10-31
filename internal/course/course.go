@@ -4,12 +4,14 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/chromz/wiki-backend/internal/session"
+	"github.com/chromz/wiki-backend/internal/textclass"
 	"github.com/chromz/wiki-backend/pkg/errormessages"
 	"github.com/chromz/wiki-backend/pkg/pagination"
 	"github.com/chromz/wiki-backend/pkg/persistence"
 	"github.com/julienschmidt/httprouter"
 	"github.com/mattn/go-sqlite3"
 	"net/http"
+	"os"
 	"strconv"
 )
 
@@ -46,6 +48,12 @@ func (c *Course) Validate() error {
 
 // Create is an endpoint to create a course
 func Create(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+	claims := r.Context().Value(session.ClaimsKey).(*session.Claims)
+	if claims.Role != "TEACHER" {
+		errormessages.WriteErrorInterface(w, "Not enough privileges",
+			http.StatusUnauthorized)
+		return
+	}
 	course := &Course{}
 	decoder := json.NewDecoder(r.Body)
 	err := decoder.Decode(course)
@@ -69,12 +77,6 @@ func Create(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		return
 	}
 
-	claims := r.Context().Value(session.ClaimsKey).(*session.Claims)
-	if claims.Role != "TEACHER" {
-		errormessages.WriteErrorInterface(w, "Not enough privileges",
-			http.StatusUnauthorized)
-		return
-	}
 	db := persistence.GetDb()
 	tx, err := db.Begin()
 	if err != nil {
@@ -105,6 +107,24 @@ func Create(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		return
 	}
 	course.ID, _ = res.LastInsertId()
+	dirName := textclass.SyncDir() +
+		strconv.FormatInt(gradeID, 10) + "/" +
+		strconv.FormatInt(course.ID, 10) + "/"
+	if err = os.Mkdir(dirName, 0700); err != nil {
+		errormessages.WriteErrorMessage(w, "Unable  to create course",
+			http.StatusInternalServerError)
+		tx.Rollback()
+		return
+	}
+	imgDirName := textclass.SyncDir() + "images/" +
+		strconv.FormatInt(gradeID, 10) + "/" +
+		strconv.FormatInt(course.ID, 10) + "/"
+	if err = os.Mkdir(imgDirName, 0700); err != nil {
+		errormessages.WriteErrorMessage(w, "Unable  to create course",
+			http.StatusInternalServerError)
+		tx.Rollback()
+		return
+	}
 	err = tx.Commit()
 	if err != nil {
 		errString := "Unable to add course"
@@ -192,6 +212,12 @@ func Read(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 
 // Update updates a course resource
 func Update(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+	claims := r.Context().Value(session.ClaimsKey).(*session.Claims)
+	if claims.Role != "TEACHER" {
+		errormessages.WriteErrorInterface(w, "Not enough privileges",
+			http.StatusUnauthorized)
+		return
+	}
 	course := &Course{}
 	decoder := json.NewDecoder(r.Body)
 	gradeID, err := strconv.ParseInt(p.ByName("id"), 0, 64)
@@ -230,12 +256,6 @@ func Update(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		return
 	}
 
-	claims := r.Context().Value(session.ClaimsKey).(*session.Claims)
-	if claims.Role != "TEACHER" {
-		errormessages.WriteErrorInterface(w, "Not enough privileges",
-			http.StatusUnauthorized)
-		return
-	}
 	db := persistence.GetDb()
 	updateQuery := `
 		UPDATE course
@@ -261,8 +281,21 @@ func Update(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 
 // Delete endpoint to delete a specifig course
 func Delete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
-	courseID, err := strconv.ParseInt(p.ByName("courseid"), 0, 64)
 
+	claims := r.Context().Value(session.ClaimsKey).(*session.Claims)
+	if claims.Role != "TEACHER" {
+		errormessages.WriteErrorInterface(w, "Not enough privileges",
+			http.StatusUnauthorized)
+		return
+	}
+	gradeID, err := strconv.ParseInt(p.ByName("id"), 0, 64)
+	if err != nil {
+		errormessages.WriteErrorMessage(w, "Invalid grade id",
+			http.StatusBadRequest)
+		return
+
+	}
+	courseID, err := strconv.ParseInt(p.ByName("courseid"), 0, 64)
 	if err != nil {
 		errormessages.WriteErrorMessage(w, "Invalid id",
 			http.StatusBadRequest)
@@ -276,21 +309,22 @@ func Delete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		return
 	}
 
-	claims := r.Context().Value(session.ClaimsKey).(*session.Claims)
-	if claims.Role != "TEACHER" {
-		errormessages.WriteErrorInterface(w, "Not enough privileges",
-			http.StatusUnauthorized)
+	db := persistence.GetDb()
+	tx, err := db.Begin()
+	if err != nil {
+		errormessages.WriteErrorMessage(w, "Unable to reach database",
+			http.StatusInternalServerError)
 		return
 	}
-	db := persistence.GetDb()
 	deleteQuery := `
 		DELETE FROM course
 		WHERE id = ?
 	`
-	res, err := db.Exec(deleteQuery, courseID)
+	res, err := tx.Exec(deleteQuery, courseID)
 	if err != nil {
 		errormessages.WriteErrorMessage(w, "Unable to delete",
 			http.StatusInternalServerError)
+		tx.Rollback()
 		return
 	}
 	affectedRows, err := res.RowsAffected()
@@ -298,8 +332,36 @@ func Delete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	if affectedRows == 0 {
 		errormessages.WriteErrorMessage(w, "Invalid id",
 			http.StatusBadRequest)
+		tx.Rollback()
+		return
+	}
+
+	dirName := textclass.SyncDir() +
+		strconv.FormatInt(gradeID, 10) + "/" +
+		strconv.FormatInt(courseID, 10) + "/"
+	if err = os.RemoveAll(dirName); err != nil {
+		errormessages.WriteErrorMessage(w, "Unable  to create course",
+			http.StatusInternalServerError)
+		tx.Rollback()
+		return
+	}
+	imgDirName := textclass.SyncDir() + "images/" +
+		strconv.FormatInt(gradeID, 10) + "/" +
+		strconv.FormatInt(courseID, 10) + "/"
+	if err = os.RemoveAll(imgDirName); err != nil {
+		errormessages.WriteErrorMessage(w, "Unable  to create course",
+			http.StatusInternalServerError)
+		tx.Rollback()
+		return
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		errString := "Unable to remove class"
+		errormessages.WriteErrorMessage(w, errString,
+			http.StatusInternalServerError)
+		tx.Rollback()
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
-	// remember to delete the files!!!!
 }
