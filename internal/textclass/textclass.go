@@ -20,11 +20,9 @@ var syncDir string
 
 // TextClass represents a markdown textual class
 type TextClass struct {
-	ID           int64  `json:"id"`
-	CourseID     int64  `json:"courseId"`
-	Title        string `json:"title"`
-	FileName     string `json:"fileName"`
-	ProcFileName string `json:"procFileName"`
+	ID       int64  `json:"id"`
+	CourseID int64  `json:"courseId"`
+	Title    string `json:"title"`
 }
 
 // SyncDir sets the dir to synchronize
@@ -220,7 +218,7 @@ func WriteFile(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	courseIDDir := strconv.FormatInt(courseID, 10) + "/"
 	classIDDir := strconv.FormatInt(classID, 10) + "/"
 	directory := syncDir + gradeIDDir + courseIDDir + classIDDir
-	imgDirectory := syncDir + "images/" + gradeIDDir +
+	imgDirectory := syncDir + "assets/" + gradeIDDir +
 		courseIDDir + classIDDir
 	fileName := directory + multipartHeader.Filename
 
@@ -273,7 +271,7 @@ func WriteFile(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		err = os.Mkdir(imgDirectory, 0700)
 		if err != nil {
 			errormessages.WriteErrorMessage(w,
-				"Unable to create images directory",
+				"Unable to create assets directory",
 				http.StatusInternalServerError)
 			tx.Rollback()
 			return
@@ -338,7 +336,7 @@ func Read(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 
 	db := persistence.GetDb()
 	findQuery := `
-		SELECT id, course_id, file_name, proc_file_name, title
+		SELECT id, course_id, title
 		FROM text_class
 		WHERE id > ?
 		AND course_id = ?
@@ -354,11 +352,10 @@ func Read(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	var classes []TextClass
 	for rows.Next() {
 		class := TextClass{}
-		err = rows.Scan(&class.ID, &class.CourseID, &class.FileName,
-			&class.ProcFileName, &class.Title)
+		err = rows.Scan(&class.ID, &class.CourseID, &class.Title)
 		if err != nil {
 			errormessages.WriteErrorMessage(w,
-				"Unable to find classes"+err.Error(),
+				"Unable to find classes",
 				http.StatusInternalServerError)
 			return
 		}
@@ -498,7 +495,7 @@ func Delete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	courseIDDir := strconv.FormatInt(courseID, 10) + "/"
 	classIDDir := strconv.FormatInt(classID, 10) + "/"
 	directory := syncDir + gradeIDDir + courseIDDir + classIDDir
-	imgDirectory := syncDir + "images/" + gradeIDDir +
+	imgDirectory := syncDir + "assets/" + gradeIDDir +
 		courseIDDir + classIDDir
 
 	if err = os.RemoveAll(directory); err != nil {

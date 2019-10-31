@@ -116,7 +116,7 @@ func Create(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		tx.Rollback()
 		return
 	}
-	imgDirName := textclass.SyncDir() + "images/" +
+	imgDirName := textclass.SyncDir() + "assets/" +
 		strconv.FormatInt(gradeID, 10) + "/" +
 		strconv.FormatInt(course.ID, 10) + "/"
 	if err = os.Mkdir(imgDirName, 0700); err != nil {
@@ -345,7 +345,7 @@ func Delete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		tx.Rollback()
 		return
 	}
-	imgDirName := textclass.SyncDir() + "images/" +
+	imgDirName := textclass.SyncDir() + "assets/" +
 		strconv.FormatInt(gradeID, 10) + "/" +
 		strconv.FormatInt(courseID, 10) + "/"
 	if err = os.RemoveAll(imgDirName); err != nil {

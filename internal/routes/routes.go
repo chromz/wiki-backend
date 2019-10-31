@@ -86,7 +86,7 @@ func RouteHandler() http.Handler {
 	)
 
 	router.ServeFiles("/static/*filepath",
-		http.Dir(textclass.SyncDir()+"images/"))
+		http.Dir(textclass.SyncDir()+"assets/"))
 
 	return router
 }

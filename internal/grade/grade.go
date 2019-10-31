@@ -88,7 +88,7 @@ func Create(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 		tx.Rollback()
 		return
 	}
-	imgDirName := textclass.SyncDir() + "images/" +
+	imgDirName := textclass.SyncDir() + "assets/" +
 		strconv.FormatInt(grade.ID, 10) + "/"
 	if err = os.MkdirAll(imgDirName, 0700); err != nil {
 		errormessages.WriteErrorMessage(w, "Unable  to create grade",
@@ -288,7 +288,7 @@ func Delete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		tx.Rollback()
 		return
 	}
-	imgDirName := textclass.SyncDir() + "images/" +
+	imgDirName := textclass.SyncDir() + "assets/" +
 		strconv.FormatInt(gradeID, 10) + "/"
 	if err = os.RemoveAll(imgDirName); err != nil {
 		errormessages.WriteErrorMessage(w, "Unable  to create grade",
