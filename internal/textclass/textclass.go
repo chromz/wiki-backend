@@ -232,7 +232,7 @@ func WriteFile(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	}
 	updateQuery := `
 		UPDATE text_class
-		SET file_name = ?
+		SET file_name = ?, proc_file_name = ''
 		WHERE id = ?
 	`
 	res, err := tx.Exec(updateQuery, fileName, classID)
