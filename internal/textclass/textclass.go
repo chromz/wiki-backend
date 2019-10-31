@@ -9,7 +9,9 @@ import (
 	"github.com/chromz/wiki-backend/pkg/persistence"
 	"github.com/julienschmidt/httprouter"
 	"github.com/mattn/go-sqlite3"
+	"io"
 	"net/http"
+	"os"
 	"strconv"
 )
 
@@ -79,7 +81,8 @@ func Create(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 
 	claims := r.Context().Value(session.ClaimsKey).(*session.Claims)
 	if claims.Role != "TEACHER" {
-		errormessages.WriteErrorInterface(w, "Not enough privileges", +http.StatusUnauthorized)
+		errormessages.WriteErrorInterface(w, "Not enough privileges",
+			http.StatusUnauthorized)
 		return
 	}
 	db := persistence.GetDb()
@@ -126,6 +129,43 @@ func Create(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	json.NewEncoder(w).Encode(textClass)
 }
 
+// WriteFile is an endpoint to upload and process markdown text
+func WriteFile(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+	// TODO
+	classID, err := strconv.ParseInt(p.ByName("classid"), 0, 64)
+	if err != nil {
+		errormessages.WriteErrorMessage(w, "Invalid id",
+			http.StatusBadRequest)
+		return
+	}
+	r.ParseMultipartForm(10 << 20)
+
+	file, multipartHeader, err := r.FormFile("file")
+	if err != nil {
+		errormessages.WriteErrorMessage(w, "Unable to get file",
+			http.StatusBadRequest)
+		return
+	}
+	defer file.Close()
+
+	mimeType := multipartHeader.Header.Get("Content-Type")
+	if mimeType != "text/markdown" {
+		errormessages.WriteErrorMessage(w, "Invalid file",
+			http.StatusBadRequest)
+		return
+	}
+	fileName := syncDir + strconv.FormatInt(classID, 10) +
+		"_" + multipartHeader.Filename
+	osFile, err := os.OpenFile(fileName, os.O_WRONLY|os.O_CREATE, 0755)
+	if err != nil {
+		errormessages.WriteErrorMessage(w, "Could not open os file",
+			http.StatusBadRequest)
+		return
+	}
+	defer osFile.Close()
+	io.Copy(osFile, file)
+}
+
 // Read returns available text classess, paginated
 func Read(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	params := r.URL.Query()
@@ -164,7 +204,7 @@ func Read(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 
 	db := persistence.GetDb()
 	findQuery := `
-SELECT id, course_id, file_name, proc_file_name, title
+		SELECT id, course_id, file_name, proc_file_name, title
 		FROM text_class
 		WHERE id > ?
 		AND course_id = ?
@@ -241,7 +281,7 @@ func Update(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	}
 	db := persistence.GetDb()
 	updateQuery := `
-UPDATE text_class
+		UPDATE text_class
 		SET title = ?
 		WHERE id = ?
 	`
@@ -284,7 +324,7 @@ func Delete(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	}
 	db := persistence.GetDb()
 	deleteQuery := `
-DELETE FROM text_class
+		DELETE FROM text_class
 		WHERE id = ?
 	`
 	res, err := db.Exec(deleteQuery, classID)

@@ -14,7 +14,7 @@ func main() {
 	logger := log.GetLogger()
 	defer logger.Sync()
 	port := flag.String("p", "3000", "wiki -p [PORT]")
-	dbPath := flag.String("d", "./ecommunity.db",
+	dbPath := flag.String("D", "./ecommunity.db",
 		"wiki -d [PATH TO DATABASE]")
 	directory := flag.String("dir", "sync/", "wiki -dir [DIR PATH]")
 	flag.Parse()
