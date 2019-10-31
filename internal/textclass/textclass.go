@@ -1,6 +1,7 @@
 package textclass
 
 import (
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"github.com/chromz/wiki-backend/internal/session"
@@ -134,6 +135,44 @@ func Create(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	json.NewEncoder(w).Encode(textClass)
 }
 
+// ReadFile is an endpoint to get the markdown file
+func ReadFile(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+	classID, err := strconv.ParseInt(p.ByName("classid"), 0, 64)
+	if err != nil {
+		errormessages.WriteErrorMessage(w, "Invalid id",
+			http.StatusBadRequest)
+		return
+	}
+	db := persistence.GetDb()
+	findQuery := `
+		SELECT file_name, proc_file_name
+		FROM text_class
+		WHERE id = ?
+	`
+	row := db.QueryRow(findQuery, classID)
+	var fileName, procFileName string
+	err = row.Scan(&fileName, &procFileName)
+	if err == sql.ErrNoRows {
+		errormessages.WriteErrorInterface(w,
+			"Class does not exists",
+			http.StatusNotFound)
+		return
+	}
+	finalFileName := procFileName
+	if finalFileName == "" {
+		finalFileName = fileName
+	}
+
+	if finalFileName == "" {
+		errormessages.WriteErrorInterface(w,
+			"There is no file for the class",
+			http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", "text/markdown")
+	http.ServeFile(w, r, finalFileName)
+}
+
 // WriteFile is an endpoint to upload and process markdown text
 func WriteFile(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	claims := r.Context().Value(session.ClaimsKey).(*session.Claims)
@@ -209,6 +248,7 @@ func WriteFile(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	if rowsAffected != 1 {
 		errormessages.WriteErrorInterface(w, "Id not found",
 			http.StatusNotFound)
+		tx.Rollback()
 		return
 
 	}
@@ -216,9 +256,18 @@ func WriteFile(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	if _, err = os.Stat(directory); os.IsNotExist(err) {
 		err = os.Mkdir(directory, 0700)
 		if err != nil {
+			if os.IsNotExist(err) {
+				errormessages.WriteErrorMessage(w,
+					"Invalid grade/course id",
+					http.StatusInternalServerError)
+				tx.Rollback()
+				return
+
+			}
 			errormessages.WriteErrorMessage(w,
 				"Unable to create directory",
 				http.StatusInternalServerError)
+			tx.Rollback()
 			return
 		}
 		err = os.Mkdir(imgDirectory, 0700)
@@ -226,6 +275,7 @@ func WriteFile(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 			errormessages.WriteErrorMessage(w,
 				"Unable to create images directory",
 				http.StatusInternalServerError)
+			tx.Rollback()
 			return
 		}
 	}
@@ -234,6 +284,7 @@ func WriteFile(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	if err != nil {
 		errormessages.WriteErrorMessage(w, "Could not open os file",
 			http.StatusBadRequest)
+		tx.Rollback()
 		return
 	}
 	defer osFile.Close()

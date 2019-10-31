@@ -72,6 +72,9 @@ func RouteHandler() http.Handler {
 	router.GET("/grade/:id/course/:courseid/textclass",
 		originMiddleware(session.AuthMiddleware(textclass.Read)),
 	)
+	router.GET("/grade/:id/course/:courseid/textclass/:classid/file",
+		originMiddleware(session.AuthMiddleware(textclass.ReadFile)),
+	)
 	router.POST("/grade/:id/course/:courseid/textclass/:classid/file",
 		originMiddleware(session.AuthMiddleware(textclass.WriteFile)),
 	)
