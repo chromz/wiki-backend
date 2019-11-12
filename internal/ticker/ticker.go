@@ -24,7 +24,7 @@ var destDir string
 
 var logger = log.GetLogger()
 var db *sql.DB
-var imgRegex = regexp.MustCompile(`!\[.*?\]\((.*?)\)`)
+var linkRegex = regexp.MustCompile(`\[.*?\]\((.*?)\)`)
 var basePath string
 
 type file struct {
@@ -44,46 +44,65 @@ func NewTicker(basePathFlag, directory string, pollingRate int) *Synchronizer {
 	}
 }
 
+func parseMarkdown(procFile file, markdownText, dir, midDir string) (map[string]string, error) {
+	processedLinks := make(map[string]string)
+	linkMatches := linkRegex.FindAllStringSubmatch(markdownText, -1)
+	for _, matchArray := range linkMatches {
+		if len(matchArray) < 2 {
+			continue
+		}
+		urlSplit := strings.Split(matchArray[1], " ")
+		mdURL := urlSplit[0]
+		if _, ok := processedLinks[mdURL]; ok {
+			continue
+		}
+
+		response, err := http.Get(mdURL)
+		if err != nil {
+			logger.Error("Unable to download file", err)
+			continue
+		}
+		baseName := filepath.Base(mdURL)
+		extension := filepath.Ext(baseName)
+		prefix := strconv.FormatInt(procFile.classID, 10) + "_"
+		var fileName string
+		fileName = dir + prefix + baseName
+		if extension == "" {
+			// Assume it is html
+			fileName += ".html"
+		}
+		logger.Info(fileName)
+		file, err := os.OpenFile(fileName, os.O_WRONLY|os.O_CREATE, 0700)
+		if err != nil {
+			logger.Error("Unable to open file", err)
+			return nil, err
+		}
+		_, err = io.Copy(file, response.Body)
+		if err != nil {
+			logger.Error("Unable to copy file", err)
+			return nil, err
+		}
+		dbName := basePath + midDir + prefix + baseName
+		if extension == "" {
+			dbName += ".html"
+		}
+		processedLinks[mdURL] = dbName
+
+		file.Close()
+		response.Body.Close()
+		logger.Info("Resource: " + fileName + " created")
+	}
+	return processedLinks, nil
+}
+
 func processMarkdown(procFile file, markdownText string) {
-	processedImages := make(map[string]string)
 	classIDDir := strconv.FormatInt(procFile.classID, 10) + "/"
 	courseIDDir := strconv.FormatInt(procFile.courseID, 10) + "/"
 	gradeIDDir := strconv.FormatInt(procFile.gradeID, 10) + "/"
 	midDir := gradeIDDir + courseIDDir + classIDDir
 	dir := destDir + "assets/" + midDir
-	matches := imgRegex.FindAllStringSubmatch(markdownText, -1)
-	for _, matchArray := range matches {
-		if len(matchArray) < 2 {
-			continue
-		}
-		urlSplit := strings.Split(matchArray[1], " ")
-		imgURL := urlSplit[0]
-		if _, ok := processedImages[imgURL]; ok {
-			continue
-		}
-		response, err := http.Get(imgURL)
-		if err != nil {
-			logger.Error("Unable to download file", err)
-			continue
-		}
-		baseName := filepath.Base(imgURL)
-		fileName := dir + baseName
-		logger.Info(fileName)
-		file, err := os.OpenFile(fileName, os.O_WRONLY|os.O_CREATE, 0700)
-		if err != nil {
-			logger.Error("Unable to open file", err)
-			return
-		}
-		_, err = io.Copy(file, response.Body)
-		if err != nil {
-			logger.Error("Unable to copy file", err)
-			return
-		}
-		processedImages[imgURL] = basePath + midDir + baseName
-		file.Close()
-		response.Body.Close()
-		logger.Info("Image: " + fileName + " created")
-	}
+	processedImages, err := parseMarkdown(procFile, markdownText, dir,
+		midDir)
 	var replaces []string
 	for k, v := range processedImages {
 		replaces = append(replaces, k)
@@ -94,7 +113,7 @@ func processMarkdown(procFile file, markdownText string) {
 
 	baseName := filepath.Base(procFile.fileName)
 	processedFileName := destDir + midDir + "processed_" + baseName
-	err := ioutil.WriteFile(processedFileName,
+	err = ioutil.WriteFile(processedFileName,
 		[]byte(processedMarkdown), 0700)
 	if err != nil {
 		logger.Error("Unable to write processed file", err)
@@ -102,7 +121,7 @@ func processMarkdown(procFile file, markdownText string) {
 	}
 	logger.Info("Saved processed file to " + processedFileName)
 	updateQuery := `
-		UPDATE text_class
+UPDATE text_class
 		SET proc_file_name = ?
 		WHERE id = ?
 	`
@@ -119,10 +138,10 @@ func processMarkdown(procFile file, markdownText string) {
 	}
 }
 
-func processImages() {
+func process() {
 	logger.Info("Pulling data from database")
 	selectQuery := `
-		SELECT text_class.id as class_id, course_id, grade_id, file_name
+SELECT text_class.id as class_id, course_id, grade_id, file_name
 		FROM text_class
 		JOIN course ON course.id = text_class.course_id
 		JOIN grade ON course.grade_id = grade.id
@@ -164,7 +183,7 @@ func (synchronizer *Synchronizer) Run() {
 	for {
 		select {
 		case <-synchronizer.ticker.C:
-			processImages()
+			process()
 		}
 	}
 }
