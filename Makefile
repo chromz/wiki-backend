@@ -1,13 +1,13 @@
 SHELL := /bin/bash
 
 BACKEND := cmd/wiki/wiki.go
-IMGPROC := cmd/imgproc/imgproc.go
+MDPROC := cmd/mdproc/mdproc.go
 .PHONY: all
 
 all:
 	@go build $(BACKEND)
 
 
-.PHONY: imgproc
-imgproc:
-	@go build $(IMGPROC)
+.PHONY: mdproc
+mdproc:
+	@go build $(MDPROC)
