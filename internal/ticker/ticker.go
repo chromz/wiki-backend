@@ -2,6 +2,7 @@ package ticker
 
 import (
 	"database/sql"
+	"github.com/PuerkitoBio/goquery"
 	"github.com/chromz/wiki-backend/pkg/log"
 	"github.com/chromz/wiki-backend/pkg/persistence"
 	"github.com/gocolly/colly"
@@ -54,8 +55,8 @@ func isRelative(testURL string) bool {
 	return err == nil && u.Scheme == "" && u.Host == ""
 }
 
-func onStyleSheet(processedLinks map[string]string, styleCount *int,
-	midDir, fileName string, urlStruct *url.URL,
+func onAsset(processedLinks map[string]string, assetCount *int,
+	midDir, fileName, postfix, attribute string, urlStruct *url.URL,
 	client *http.Client) colly.HTMLCallback {
 	resFolder := filepath.Base(fileName) + "_resources/"
 	fileName += "_resources/"
@@ -65,8 +66,11 @@ func onStyleSheet(processedLinks map[string]string, styleCount *int,
 		return nil
 	}
 	return func(e *colly.HTMLElement) {
-		link := e.Attr("href")
+		link := e.Attr(attribute)
 		var downloadLink string
+		if len(link) > 2 && link[0] == '/' && link[1] == '/' {
+			link = "https:" + link
+		}
 		if isRelative(link) {
 			downloadLink = urlStruct.Scheme + "://" +
 				urlStruct.Host + link
@@ -92,13 +96,19 @@ func onStyleSheet(processedLinks map[string]string, styleCount *int,
 			return
 		}
 
-		styleFileName := fileName
-		baseName := strconv.Itoa(*styleCount) + "_style.css"
+		assetFileName := fileName
+		baseName := strconv.Itoa(*assetCount) + postfix
 		dbName := basePath + midDir + resFolder + baseName
+		// extension := filepath.Ext(link)
+		// if extension != "" {
+		// 	dbName += extension
+		// }
 		processedLinks[link] = dbName
-		styleFileName += baseName
-		*styleCount++
-		file, err := os.OpenFile(styleFileName, os.O_WRONLY|os.O_CREATE, 0700)
+		e.DOM.SetAttr(attribute, dbName)
+		assetFileName += baseName
+		*assetCount++
+		file, err := os.OpenFile(assetFileName,
+			os.O_WRONLY|os.O_CREATE, 0700)
 		if err != nil {
 			logger.Error("Unable to open file", err)
 			return
@@ -108,30 +118,22 @@ func onStyleSheet(processedLinks map[string]string, styleCount *int,
 			logger.Error("Unable to copy file", err)
 			return
 		}
-		logger.Info("Downloaded style: " + styleFileName)
+		logger.Info("Downloaded asset: " + assetFileName)
 		file.Close()
 		response.Body.Close()
 	}
 }
 
-func afterScrap(fileName string,
-	processedLinks map[string]string) colly.ScrapedCallback {
-	return func(r *colly.Response) {
-		htmlContent := string(r.Body)
-		var replaces []string
-		for k, v := range processedLinks {
-			replaces = append(replaces, k)
-			replaces = append(replaces, v)
-		}
-		replacer := strings.NewReplacer(replaces...)
-		processedHTML := replacer.Replace(htmlContent)
+func afterScrap(fileName string) colly.HTMLCallback {
+	return func(e *colly.HTMLElement) {
+		htmlContent, _ := goquery.OuterHtml(e.DOM)
 		file, err := os.OpenFile(fileName,
 			os.O_WRONLY|os.O_CREATE, 0700)
 		if err != nil {
 			logger.Error("Unable to open file", err)
 			return
 		}
-		file.Write([]byte(processedHTML))
+		file.Write([]byte(htmlContent))
 		logger.Info("Processed web page written: " + fileName)
 		file.Close()
 	}
@@ -153,6 +155,7 @@ func parseMarkdown(procFile file, markdownText,
 		if _, ok := processedLinks[mdURL]; ok {
 			continue
 		}
+
 		urlStruct, err := url.Parse(mdURL)
 		if err != nil {
 			return nil, err
@@ -175,16 +178,29 @@ func parseMarkdown(procFile file, markdownText,
 			// Assume it is html
 			htmlLinks := make(map[string]string)
 			collector.OnHTML(`link[rel="stylesheet"]`,
-				onStyleSheet(
+				onAsset(
 					htmlLinks,
 					&styleCount,
 					midDir,
 					fileName,
+					"_style.css",
+					"href",
+					urlStruct,
+					client,
+				))
+			collector.OnHTML(`img`,
+				onAsset(
+					htmlLinks,
+					&styleCount,
+					midDir,
+					fileName,
+					"_image",
+					"src",
 					urlStruct,
 					client,
 				))
 			fileName += ".html"
-			collector.OnScraped(afterScrap(fileName, htmlLinks))
+			collector.OnHTML("html", afterScrap(fileName))
 			collector.Visit(mdURL)
 		} else {
 			logger.Info(fileName)
