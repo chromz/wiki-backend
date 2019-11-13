@@ -17,12 +17,14 @@ func main() {
 	pollingRate := flag.Int("p", 5000, "mdproc -p [POLLING RATE]")
 	basePath := flag.String("b", "http://localhost:3000/static/",
 		"mdproc -b [BASE PATH]")
+	userAgent := flag.String("A", "", "mdproc -A [USER AGENT]")
 	flag.Parse()
 	if (*directory)[len(*directory)-1] != '/' {
 		*directory += "/"
 	}
 	logger.InitMessage("mdproc", "with directory "+*directory)
 	persistence.SetDbPath(*dbPath)
-	ticker := ticker.NewTicker(*basePath, *directory, *pollingRate)
+	ticker := ticker.NewTicker(*basePath, *userAgent,
+		*directory, *pollingRate)
 	ticker.Run()
 }
