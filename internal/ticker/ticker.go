@@ -57,7 +57,7 @@ func isRelative(testURL string) bool {
 
 func onAsset(processedLinks map[string]string, assetCount *int,
 	midDir, fileName, postfix, attribute string, urlStruct *url.URL,
-	client *http.Client) colly.HTMLCallback {
+	client *http.Client, isImage bool) colly.HTMLCallback {
 	resFolder := filepath.Base(fileName) + "_resources/"
 	fileName += "_resources/"
 	err := os.MkdirAll(fileName, 0700)
@@ -95,13 +95,17 @@ func onAsset(processedLinks map[string]string, assetCount *int,
 			logger.Error("Unable to download file", err)
 			return
 		}
-
+		extension := filepath.Ext(link)
 		assetFileName := fileName
 		baseName := strconv.Itoa(*assetCount) + postfix
 		dbName := basePath + midDir + resFolder + baseName
+		assetFileName += baseName
+		if isImage && extension != "" {
+			dbName += extension
+			assetFileName += extension
+		}
 		processedLinks[link] = dbName
 		e.DOM.SetAttr(attribute, dbName)
-		assetFileName += baseName
 		*assetCount++
 		file, err := os.OpenFile(assetFileName,
 			os.O_WRONLY|os.O_CREATE, 0700)
@@ -140,7 +144,6 @@ func parseMarkdown(procFile file, markdownText,
 	processedLinks := make(map[string]string)
 	linkMatches := linkRegex.FindAllStringSubmatch(markdownText, -1)
 	client := &http.Client{}
-	collector := colly.NewCollector()
 	for _, matchArray := range linkMatches {
 		if len(matchArray) < 2 {
 			continue
@@ -170,8 +173,9 @@ func parseMarkdown(procFile file, markdownText,
 		var fileName string
 		var styleCount int
 		fileName = dir + prefix + baseName
-		if extension == "" {
+		if extension == "" || urlStruct.Path == "" {
 			// Assume it is html
+			collector := colly.NewCollector()
 			htmlLinks := make(map[string]string)
 			collector.OnHTML(`link[rel="stylesheet"]`,
 				onAsset(
@@ -183,6 +187,7 @@ func parseMarkdown(procFile file, markdownText,
 					"href",
 					urlStruct,
 					client,
+					false,
 				))
 			collector.OnHTML(`img`,
 				onAsset(
@@ -194,12 +199,14 @@ func parseMarkdown(procFile file, markdownText,
 					"src",
 					urlStruct,
 					client,
+					true,
 				))
 			fileName += ".html"
 			processedLinks[mdURL] = basePath + midDir +
 				prefix + baseName + ".html"
 			collector.OnHTML("html", afterScrap(fileName))
 			collector.Visit(mdURL)
+			collector.Wait()
 		} else {
 			logger.Info(fileName)
 			response, err := client.Do(req)
