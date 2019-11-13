@@ -99,10 +99,6 @@ func onAsset(processedLinks map[string]string, assetCount *int,
 		assetFileName := fileName
 		baseName := strconv.Itoa(*assetCount) + postfix
 		dbName := basePath + midDir + resFolder + baseName
-		// extension := filepath.Ext(link)
-		// if extension != "" {
-		// 	dbName += extension
-		// }
 		processedLinks[link] = dbName
 		e.DOM.SetAttr(attribute, dbName)
 		assetFileName += baseName
@@ -200,6 +196,8 @@ func parseMarkdown(procFile file, markdownText,
 					client,
 				))
 			fileName += ".html"
+			processedLinks[mdURL] = basePath + midDir +
+				prefix + baseName + ".html"
 			collector.OnHTML("html", afterScrap(fileName))
 			collector.Visit(mdURL)
 		} else {
@@ -221,9 +219,6 @@ func parseMarkdown(procFile file, markdownText,
 				return nil, err
 			}
 			dbName := basePath + midDir + prefix + baseName
-			if extension == "" {
-				dbName += ".html"
-			}
 			processedLinks[mdURL] = dbName
 			file.Close()
 			response.Body.Close()
