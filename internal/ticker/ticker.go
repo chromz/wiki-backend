@@ -205,7 +205,11 @@ func parseMarkdown(procFile file, markdownText,
 			processedLinks[mdURL] = basePath + midDir +
 				prefix + baseName + ".html"
 			collector.OnHTML("html", afterScrap(fileName))
-			collector.Visit(mdURL)
+			err = collector.Visit(mdURL)
+			if err != nil {
+				logger.Error("Unable to scrap page", err)
+				return nil, err
+			}
 			collector.Wait()
 		} else {
 			logger.Info(fileName)
