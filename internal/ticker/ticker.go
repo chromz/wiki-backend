@@ -173,7 +173,7 @@ func parseMarkdown(procFile file, markdownText,
 		var fileName string
 		var styleCount int
 		fileName = dir + prefix + baseName
-		if extension == "" || urlStruct.Path == "" {
+		if extension == "" || urlStruct.Path == "" || extension == ".html" {
 			// Assume it is html
 			collector := colly.NewCollector(colly.UserAgent(userAgent))
 			htmlLinks := make(map[string]string)
