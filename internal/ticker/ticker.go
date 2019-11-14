@@ -175,7 +175,7 @@ func parseMarkdown(procFile file, markdownText,
 		fileName = dir + prefix + baseName
 		if extension == "" || urlStruct.Path == "" {
 			// Assume it is html
-			collector := colly.NewCollector()
+			collector := colly.NewCollector(colly.UserAgent(userAgent))
 			htmlLinks := make(map[string]string)
 			collector.OnHTML(`link[rel="stylesheet"]`,
 				onAsset(
