@@ -25,13 +25,14 @@ const (
 	saltLen = 32
 )
 
+var hashBuilder strings.Builder
 var logger = log.GetLogger()
 
 // GenerateFromPassword generate a hash from a password
 func GenerateFromPassword(password []byte, time, memory uint32,
 	threads uint8) (string, error) {
-	var hashBuilder strings.Builder
 	salt := make([]byte, saltLen)
+	hashBuilder.Reset()
 	_, err := rand.Read(salt)
 	if err != nil {
 		return "", errors.New("Unable to generate random salt")
