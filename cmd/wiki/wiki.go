@@ -24,6 +24,10 @@ func main() {
 	if (*directory)[len(*directory)-1] != '/' {
 		*directory += "/"
 	}
+
+	if (*baseURI)[len(*baseURI)-1] != '/' {
+		*baseURI += "/"
+	}
 	textclass.NewSyncDir(*directory)
 	textclass.NewBaseURI(*baseURI)
 	logger.FatalError("Could not listen and serve",
