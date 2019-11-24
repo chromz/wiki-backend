@@ -28,7 +28,6 @@ var destDir string
 var logger = log.GetLogger()
 var db *sql.DB
 var linkRegex = regexp.MustCompile(`\[.*?\]\((.*?)\)`)
-var basePath string
 var userAgent string
 
 type file struct {
@@ -39,11 +38,10 @@ type file struct {
 }
 
 // NewTicker constructor of the synchronizer ticker
-func NewTicker(basePathFlag, userAgentFlag, directory string,
+func NewTicker(userAgentFlag, directory string,
 	pollingRate int) *Synchronizer {
 	db = persistence.GetDb()
 	destDir = directory
-	basePath = basePathFlag
 	userAgent = userAgentFlag
 	return &Synchronizer{
 		ticker: time.NewTicker(time.Millisecond * time.Duration(pollingRate)),
@@ -56,7 +54,7 @@ func isRelative(testURL string) bool {
 }
 
 func onAsset(processedLinks map[string]string, assetCount *int,
-	midDir, fileName, postfix, attribute string, urlStruct *url.URL,
+	basePath, midDir, fileName, postfix, attribute string, urlStruct *url.URL,
 	client *http.Client, isImage bool) colly.HTMLCallback {
 	resFolder := filepath.Base(fileName) + "_resources/"
 	fileName += "_resources/"
@@ -139,7 +137,7 @@ func afterScrap(fileName string) colly.HTMLCallback {
 	}
 }
 
-func parseMarkdown(procFile file, markdownText,
+func parseMarkdown(procFile file, basePath, markdownText,
 	dir, midDir string) (map[string]string, error) {
 	processedLinks := make(map[string]string)
 	linkMatches := linkRegex.FindAllStringSubmatch(markdownText, -1)
@@ -181,6 +179,7 @@ func parseMarkdown(procFile file, markdownText,
 				onAsset(
 					htmlLinks,
 					&styleCount,
+					basePath,
 					midDir,
 					fileName,
 					"_style.css",
@@ -193,6 +192,7 @@ func parseMarkdown(procFile file, markdownText,
 				onAsset(
 					htmlLinks,
 					&styleCount,
+					basePath,
 					midDir,
 					fileName,
 					"_image",
@@ -240,13 +240,13 @@ func parseMarkdown(procFile file, markdownText,
 	return processedLinks, nil
 }
 
-func processMarkdown(procFile file, markdownText string) {
+func processMarkdown(basePath string, procFile file, markdownText string) {
 	classIDDir := strconv.FormatInt(procFile.classID, 10) + "/"
 	courseIDDir := strconv.FormatInt(procFile.courseID, 10) + "/"
 	gradeIDDir := strconv.FormatInt(procFile.gradeID, 10) + "/"
 	midDir := gradeIDDir + courseIDDir + classIDDir
 	dir := destDir + "assets/" + midDir
-	processedImages, err := parseMarkdown(procFile, markdownText, dir,
+	processedImages, err := parseMarkdown(procFile, basePath, markdownText, dir,
 		midDir)
 	var replaces []string
 	for k, v := range processedImages {
@@ -286,7 +286,7 @@ func processMarkdown(procFile file, markdownText string) {
 func process() {
 	logger.Info("Pulling data from database")
 	selectQuery := `
-		SELECT text_class.id as class_id, course_id, grade_id, file_name
+		SELECT text_class.id as class_id, course_id, grade_id, file_name, base_uri
 		FROM text_class
 		JOIN course ON course.id = text_class.course_id
 		JOIN grade ON course.grade_id = grade.id
@@ -298,10 +298,11 @@ func process() {
 		return
 	}
 	var rowsToProc []file
+	var basePath string
 	for rows.Next() {
 		procFile := file{}
 		err = rows.Scan(&procFile.classID, &procFile.courseID,
-			&procFile.gradeID, &procFile.fileName)
+			&procFile.gradeID, &procFile.fileName, &basePath)
 		if err != nil {
 			logger.Error("Unable to row scan", err)
 			return
@@ -319,7 +320,7 @@ func process() {
 			logger.Error("Error reading file", err)
 			return
 		}
-		processMarkdown(procFile, string(data))
+		processMarkdown(basePath, procFile, string(data))
 	}
 }
 

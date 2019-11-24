@@ -17,12 +17,15 @@ import (
 )
 
 var syncDir string
+var baseURI string
 
 // TextClass represents a markdown textual class
 type TextClass struct {
-	ID       int64  `json:"id"`
-	CourseID int64  `json:"courseId"`
-	Title    string `json:"title"`
+	ID           int64  `json:"id"`
+	CourseID     int64  `json:"courseId"`
+	Title        string `json:"title"`
+	procFileName string
+	Processed    bool `json:"processed"`
 }
 
 // SyncDir sets the dir to synchronize
@@ -34,6 +37,11 @@ func SyncDir() string {
 // NewSyncDir sets up a directory to store files and synchronize
 func NewSyncDir(dir string) {
 	syncDir = dir
+}
+
+// NewBaseURI sets a base path to the markdown processor
+func NewBaseURI(uri string) {
+	baseURI = uri
 }
 
 // Validate checks if textclass is valid
@@ -51,6 +59,7 @@ CREATE TABLE IF NOT EXISTS "text_class" (
 	"course_id"	INTEGER NOT NULL,
 	"file_name"	TEXT DEFAULT '',
 	"proc_file_name"	TEXT DEFAULT '',
+	"base_uri"	TEXT NOT NULL DEFAULT '',
 	"title"	TEXT NOT NULL,
 	FOREIGN KEY("course_id") REFERENCES "course"("id") ON DELETE CASCADE,
 	PRIMARY KEY("id")
@@ -99,10 +108,11 @@ func Create(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	}
 
 	insertQuery := `
-		INSERT INTO text_class(course_id, title)
-		VALUES(?, ?)
+		INSERT INTO text_class(course_id, title, base_uri)
+		VALUES(?, ?, ?)
 	`
-	res, err := tx.Exec(insertQuery, textClass.CourseID, textClass.Title)
+	res, err := tx.Exec(insertQuery, textClass.CourseID, textClass.Title,
+		baseURI)
 	if err != nil {
 		if sqliteErr, ok := err.(sqlite3.Error); ok {
 			if sqliteErr.ExtendedCode == sqlite3.ErrConstraintForeignKey {
@@ -336,7 +346,7 @@ func Read(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 
 	db := persistence.GetDb()
 	findQuery := `
-		SELECT id, course_id, title
+		SELECT id, course_id, title, proc_file_name
 		FROM text_class
 		WHERE id > ?
 		AND course_id = ?
@@ -352,12 +362,18 @@ func Read(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	var classes []TextClass
 	for rows.Next() {
 		class := TextClass{}
-		err = rows.Scan(&class.ID, &class.CourseID, &class.Title)
+		err = rows.Scan(&class.ID, &class.CourseID, &class.Title,
+			&class.procFileName)
 		if err != nil {
 			errormessages.WriteErrorMessage(w,
 				"Unable to find classes",
 				http.StatusInternalServerError)
 			return
+		}
+		if class.procFileName != "" {
+			class.Processed = true
+		} else {
+			class.Processed = false
 		}
 		classes = append(classes, class)
 	}

@@ -17,6 +17,7 @@ func main() {
 	dbPath := flag.String("D", "./ecommunity.db",
 		"wiki -d [PATH TO DATABASE]")
 	directory := flag.String("dir", "sync/", "wiki -dir [DIR PATH]")
+	baseURI := flag.String("U", "http://localhost:3000/static/", "wiki -U [URI]")
 	flag.Parse()
 	logger.InitMessage("backend", "port:"+*port)
 	persistence.SetDbPath(*dbPath)
@@ -24,6 +25,7 @@ func main() {
 		*directory += "/"
 	}
 	textclass.NewSyncDir(*directory)
+	textclass.NewBaseURI(*baseURI)
 	logger.FatalError("Could not listen and serve",
 		http.ListenAndServe(":"+*port, routes.RouteHandler()))
 }
